@@ -1,0 +1,35 @@
+services:
+  - type: static_site
+    name: usher-frontend
+    env: static
+    buildCommand: pnpm install && pnpm build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://usher-backend.onrender.com
+        scope: build_and_runtime
+    routes:
+      - path: /
+        destination: /index.html
+        type: rewrite
+      - path: /api
+        destination: https://usher-backend.onrender.com
+        type: proxy
+
+  - type: web_service
+    name: usher-backend
+    env: python
+    region: oregon
+    plan: starter
+    pythonVersion: 3.11
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: USE_MONGODB
+        value: false
+      - key: PORT
+        value: 10000
+      - key: PYTHONUNBUFFERED
+        value: 1
