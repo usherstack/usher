@@ -8,7 +8,7 @@ interface ServiceCardProps {
   index: number;
 }
 
-export function ServiceCard({ service, index }: ServiceCardProps) {
+export const ServiceCard = React.memo(function ServiceCard({ service, index }: ServiceCardProps) {
   const Icon = service.icon;
 
   return (
@@ -39,4 +39,4 @@ export function ServiceCard({ service, index }: ServiceCardProps) {
       </Card>
     </motion.div>
   );
-}
+});

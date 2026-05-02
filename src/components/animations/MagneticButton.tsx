@@ -1,6 +1,7 @@
-import React, { useRef, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useRef } from "react";
+import { motion, useSpring } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type MagneticButtonProps = {
   children: React.ReactNode;
@@ -15,23 +16,32 @@ export function MagneticButton({
   ...props
 }: MagneticButtonProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const isMobile = useIsMobile();
+
+  // Use useSpring for smooth, performant animations without re-renders
+  const x = useSpring(0, { stiffness: 150, damping: 15, mass: 0.1 });
+  const y = useSpring(0, { stiffness: 150, damping: 15, mass: 0.1 });
 
   const handleMouse = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!buttonRef.current) return;
+    // Disable effect on mobile
+    if (isMobile || !buttonRef.current) return;
+
     const { clientX, clientY } = e;
     const { height, width, left, top } =
       buttonRef.current.getBoundingClientRect();
     const middleX = clientX - (left + width / 2);
     const middleY = clientY - (top + height / 2);
-    setPosition({
-      x: middleX * (strength / 100),
-      y: middleY * (strength / 100),
-    });
+
+    // Update spring values
+    x.set(middleX * (strength / 100));
+    y.set(middleY * (strength / 100));
   };
 
   const reset = () => {
-    setPosition({ x: 0, y: 0 });
+    if (isMobile) return;
+    // Reset spring values
+    x.set(0);
+    y.set(0);
   };
 
   return (
@@ -39,8 +49,8 @@ export function MagneticButton({
       ref={buttonRef}
       onMouseMove={handleMouse}
       onMouseLeave={reset}
-      animate={{ x: position.x, y: position.y }}
-      transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
+      // Apply styles directly from spring values
+      style={!isMobile ? { x, y } : {}}
       className={cn("magnetic relative", className)}
       {...(props as any)}
     >

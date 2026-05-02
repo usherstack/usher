@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { throttle } from "lodash";
 
 interface Bubble {
   id: number;
@@ -12,15 +14,64 @@ interface Bubble {
 }
 
 export function AnimatedGradient() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [bubblePositions, setBubblePositions] = useState<
-    Record<number, { x: number; y: number }>
-  >({});
-  const bubblesRef = useRef<Bubble[]>([]);
+  const isMobile = useIsMobile();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const bubblesRef = useRef<HTMLDivElement[]>([]);
 
-  // Initialize bubbles
+  // Use refs to store positions and avoid re-renders
+  const mousePosition = useRef({ x: 0, y: 0 });
+
+  // Throttle mouse move handler for performance
+  const handleMouseMove = throttle((e: MouseEvent) => {
+    mousePosition.current = { x: e.clientX, y: e.clientY };
+  }, 16); // ~60fps
+
   useEffect(() => {
+    if (isMobile) return;
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      handleMouseMove.cancel(); // Clean up lodash throttle
+    };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    const animateBubbles = () => {
+      bubblesRef.current.forEach((bubble) => {
+        const { x, y } = mousePosition.current;
+        const bubbleRect = bubble.getBoundingClientRect();
+
+        const dx = x - (bubbleRect.left + bubbleRect.width / 2);
+        const dy = y - (bubbleRect.top + bubbleRect.height / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const repulsionRadius = 150; // Increased radius
+
+        if (distance < repulsionRadius) {
+          const angle = Math.atan2(dy, dx);
+          const force = (1 - distance / repulsionRadius) * 30; // Stronger force
+          const newX = -Math.cos(angle) * force;
+          const newY = -Math.sin(angle) * force;
+          bubble.style.transform = `translate(${newX}px, ${newY}px)`;
+        } else {
+          bubble.style.transform = `translate(0, 0)`;
+        }
+      });
+
+      requestAnimationFrame(animateBubbles);
+    };
+
+    const animationFrameId = requestAnimationFrame(animateBubbles);
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isMobile]);
+
+  // Disable on mobile
+  if (isMobile) return null;
+
+  const initialBubbles: Bubble[] = Array.from({ length: 18 }, (_, i) => {
     const colors = [
       "bg-primary/50",
       "bg-accent/50",
@@ -30,156 +81,87 @@ export function AnimatedGradient() {
       "bg-cyan-400/50",
       "bg-indigo-400/50",
     ];
-
-    const initialBubbles: Bubble[] = Array.from({ length: 18 }, (_, i) => ({
+    return {
       id: i,
       x: Math.random() * 100,
       y: Math.random() * 100,
-      size: Math.random() * 120 + 40, // 40-160px (larger)
-      duration: Math.random() * 6 + 8, // 8-14s
+      size: Math.random() * 120 + 40,
+      duration: Math.random() * 6 + 8,
       delay: Math.random() * 3,
       color: colors[i % colors.length],
-    }));
-
-    setBubbles(initialBubbles);
-    bubblesRef.current = initialBubbles;
-
-    // Initialize positions
-    const initialPositions: Record<number, { x: number; y: number }> = {};
-    initialBubbles.forEach((bubble) => {
-      initialPositions[bubble.id] = { x: bubble.x, y: bubble.y };
-    });
-    setBubblePositions(initialPositions);
-  }, []);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      // Calculate position as percentage (0 to 1)
-      const x = (e.clientX / window.innerWidth) * 100;
-      const y = (e.clientY / window.innerHeight) * 100;
-      setMousePosition({ x, y });
-
-      // Calculate bounce repulsion for bubbles
-      if (bubblesRef.current.length > 0) {
-        const newPositions: Record<number, { x: number; y: number }> = {};
-
-        bubblesRef.current.forEach((bubble) => {
-          const dx = x - bubble.x;
-          const dy = y - bubble.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const repulsionRadius = 30;
-
-          if (distance < repulsionRadius) {
-            // Calculate repulsion force
-            const angle = Math.atan2(dy, dx);
-            const force = (1 - distance / repulsionRadius) * 25;
-            newPositions[bubble.id] = {
-              x: bubble.x - Math.cos(angle) * force,
-              y: bubble.y - Math.sin(angle) * force,
-            };
-          } else {
-            newPositions[bubble.id] = { x: bubble.x, y: bubble.y };
-          }
-        });
-
-        setBubblePositions(newPositions);
-      }
     };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+  });
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-[-1]">
-      {/* Primary gradient orb - tracks mouse */}
-      <motion.div
-        animate={{
-          x: (mousePosition.x - 50) * 0.3,
-          y: (mousePosition.y - 50) * 0.3,
-        }}
-        transition={{ type: "spring", stiffness: 50, damping: 30, mass: 1 }}
-        className="absolute -top-[40%] -left-[20%] w-[70%] h-[70%] rounded-full bg-primary/40 blur-[100px] mix-blend-screen opacity-70"
-        style={{ animationDuration: "8s" }}
-      >
-        <div
-          className="w-full h-full rounded-full animate-pulse"
-          style={{ animationDuration: "8s" }}
-        />
-      </motion.div>
+    <div
+      ref={containerRef}
+      className="absolute inset-0 overflow-hidden pointer-events-none z-[-1]"
+    >
+      {/* Orbs are now simple CSS animations, less JS overhead */}
+      <div className="orb-1" />
+      <div className="orb-2" />
+      <div className="orb-3" />
 
-      {/* Accent gradient orb - tracks mouse with offset */}
-      <motion.div
-        animate={{
-          x: (mousePosition.x - 50) * 0.2,
-          y: (mousePosition.y - 50) * 0.2,
-        }}
-        transition={{ type: "spring", stiffness: 40, damping: 35, mass: 1.2 }}
-        className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-accent/40 blur-[100px] mix-blend-screen opacity-70"
-        style={{ animationDuration: "10s", animationDelay: "2s" }}
-      >
+      {initialBubbles.map((bubble, index) => (
         <div
-          className="w-full h-full rounded-full animate-pulse"
-          style={{ animationDuration: "10s", animationDelay: "2s" }}
-        />
-      </motion.div>
-
-      {/* Secondary gradient orb - subtle mouse tracking */}
-      <motion.div
-        animate={{
-          x: (mousePosition.x - 50) * 0.15,
-          y: (mousePosition.y - 50) * 0.15,
-        }}
-        transition={{ type: "spring", stiffness: 35, damping: 40, mass: 1.5 }}
-        className="absolute -bottom-[20%] left-[20%] w-[80%] h-[80%] rounded-full bg-primary/30 blur-[130px] mix-blend-screen opacity-60"
-        style={{ animationDuration: "12s", animationDelay: "4s" }}
-      >
-        <div
-          className="w-full h-full rounded-full animate-pulse"
-          style={{ animationDuration: "12s", animationDelay: "4s" }}
-        />
-      </motion.div>
-
-      {/* Floating Bubbles with bounce effect */}
-      {bubbles.map((bubble) => (
-        <motion.div
           key={bubble.id}
-          initial={{
-            left: `${bubble.x}%`,
-            top: `${bubble.y}%`,
-            opacity: 0,
-          }}
-          animate={{
-            left: `${bubblePositions[bubble.id]?.x || bubble.x}%`,
-            top: `${bubblePositions[bubble.id]?.y || bubble.y}%`,
-            opacity: [0.5, 0.85, 0.5],
-            scale: [1, 1.3, 1],
-          }}
-          transition={{
-            left: { type: "spring", stiffness: 100, damping: 25 },
-            top: { type: "spring", stiffness: 100, damping: 25 },
-            opacity: {
-              duration: bubble.duration,
-              repeat: Infinity,
-              ease: "easeInOut",
-            },
-            scale: {
-              duration: bubble.duration,
-              repeat: Infinity,
-              ease: "easeInOut",
-            },
-          }}
+          ref={(el) => (bubblesRef.current[index] = el!)}
           className={`absolute ${bubble.color} rounded-full blur-[25px] mix-blend-screen drop-shadow-lg`}
           style={{
+            left: `${bubble.x}%`,
+            top: `${bubble.y}%`,
             width: `${bubble.size}px`,
             height: `${bubble.size}px`,
             marginLeft: `-${bubble.size / 2}px`,
             marginTop: `-${bubble.size / 2}px`,
+            transition: "transform 0.5s ease-out", // Smooth transition
+            animation: `float ${bubble.duration}s ease-in-out infinite`,
             animationDelay: `${bubble.delay}s`,
-            boxShadow: `0 0 ${bubble.size * 0.5}px rgba(255, 255, 255, 0.3)`,
           }}
         />
       ))}
+
+      {/* CSS for orbs and float animation */}
+      <style jsx global>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0) scale(1); opacity: 0.5; }
+          50% { transform: translateY(-20px) scale(1.1); opacity: 0.85; }
+        }
+
+        .orb-1, .orb-2, .orb-3 {
+            position: absolute;
+            border-radius: 50%;
+            mix-blend-screen;
+            opacity: 0.6;
+            blur: 100px;
+            animation: pulse 10s infinite alternate;
+        }
+
+        .orb-1 {
+            width: 70%; height: 70%;
+            top: -40%; left: -20%;
+            background-color: rgba(var(--color-primary), 0.4);
+        }
+
+        .orb-2 {
+            width: 60%; height: 60%;
+            top: 20%; right: -20%;
+            background-color: rgba(var(--color-accent), 0.4);
+            animation-delay: 2s;
+        }
+
+        .orb-3 {
+            width: 80%; height: 80%;
+            bottom: -20%; left: 20%;
+            background-color: rgba(var(--color-primary), 0.3);
+            animation-delay: 4s;
+        }
+
+        @keyframes pulse {
+          0% { transform: scale(0.95); }
+          100% { transform: scale(1.05); }
+        }
+      `}</style>
 
       {/* Noise overlay */}
       <div

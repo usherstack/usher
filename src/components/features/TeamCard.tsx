@@ -8,7 +8,7 @@ interface TeamCardProps {
   index: number;
 }
 
-export const TeamCard: React.FC<TeamCardProps> = ({ member, index }) => {
+export const TeamCard = React.memo(function TeamCard({ member, index }: TeamCardProps) {
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (i: number) => ({
@@ -102,4 +102,4 @@ export const TeamCard: React.FC<TeamCardProps> = ({ member, index }) => {
       </div>
     </motion.div>
   );
-};
+});

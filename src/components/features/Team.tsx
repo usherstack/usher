@@ -2,6 +2,8 @@ import React from "react";
 import { motion } from "framer-motion";
 import { TeamCard } from "./TeamCard";
 import { teamMembers } from "@/lib/data/teamData";
+import { DynamicTestimonials } from "./DynamicTestimonials";
+import { testimonials } from "@/lib/data";
 
 export const Team: React.FC = () => {
   const containerVariants = {
@@ -72,6 +74,11 @@ export const Team: React.FC = () => {
             <TeamCard key={member.id} member={member} index={index} />
           ))}
         </motion.div>
+
+        {/* Testimonials Section */}
+        <div className="mt-24 md:mt-32">
+          <DynamicTestimonials testimonials={testimonials} />
+        </div>
 
         {/* CTA Section */}
         <motion.div
